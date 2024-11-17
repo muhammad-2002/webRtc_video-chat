@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const socket = io('https://jwr-lyart.vercel.app'); 
+  const socket = io('https://webrtcpro.vercel.app'); 
   const localVideo = document.getElementById('localVideo');
   const remoteVideo = document.getElementById('remoteVideo');
   const messageInput = document.getElementById('messageInput');
