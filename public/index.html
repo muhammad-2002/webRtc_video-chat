@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebRTC Video Chat</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body style="width: 80%; margin: auto">
+    <h2>WebRTC Video Chat</h2>
+
+    <div
+      style="display: flex; justify-content: space-between; align-items: center"
+    >
+      <div style="display: flex; flex-direction: column; width: 50%">
+        <video id="localVideo" autoplay playsinline muted></video>
+        <video id="remoteVideo" autoplay playsinline></video>
+      </div>
+
+      <div style="display: flex; flex-direction: column; width: 40%">
+        <input id="messageInput" type="text" placeholder="Type a message..." />
+        <button id="sendMessageButton">Send</button>
+        <div id="chatBox"></div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
