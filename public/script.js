@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const socket = io('https://webrtcpro.vercel.app'); 
+  const socket = io(); 
   const localVideo = document.getElementById('localVideo');
   const remoteVideo = document.getElementById('remoteVideo');
   const messageInput = document.getElementById('messageInput');
@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let localStream;
   let remoteStream = new MediaStream();
-  let peerConnection;
+  const peerConnections = {};
   const room = prompt("Enter room name to join:", "room1");
 
   const config = {
@@ -20,7 +20,6 @@ document.addEventListener("DOMContentLoaded", () => {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localVideo.srcObject = localStream;
 
-      
       socket.emit('joinRoom', room);
     } catch (err) {
       console.error('Error accessing media devices.', err);
@@ -36,41 +35,59 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on('offer', async ({ offer, from }) => {
     console.log('Received offer from', from);
     createPeerConnection(from);
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
+    const connection = peerConnections[from];
+    await connection.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await connection.createAnswer();
+    await connection.setLocalDescription(answer);
     socket.emit('answer', { room, answer, to: from });
   });
 
-  socket.on('answer', async ({ answer }) => {
-    console.log('Received answer');
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+  socket.on('answer', async ({ answer, from }) => {
+    console.log('Received answer from', from);
+    const connection = peerConnections[from];
+    await connection.setRemoteDescription(new RTCSessionDescription(answer));
   });
 
-  socket.on('ice-candidate', async (candidate) => {
-    console.log('Received ICE candidate');
-    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+  socket.on('ice-candidate', async ({ candidate, from }) => {
+    console.log('Received ICE candidate from', from);
+    const connection = peerConnections[from];
+    if (connection) {
+      await connection.addIceCandidate(new RTCIceCandidate(candidate));
+    }
   });
 
-  socket.on('chat-message', (message) => {
+  socket.on('peer-disconnected', (id) => {
+    console.log('Peer disconnected:', id);
+    if (peerConnections[id]) {
+      peerConnections[id].close();
+      delete peerConnections[id];
+    }
+  });
+
+  socket.on('chat-message', ({ message, from }) => {
     const timestamp = new Date().toLocaleTimeString();
-    chatBox.innerHTML += `<p>Peer [${timestamp}]: ${message}</p>`;
+    chatBox.innerHTML += `<p>${from} [${timestamp}]: ${message}</p>`;
   });
 
   function createPeerConnection(id) {
-    peerConnection = new RTCPeerConnection(config);
+    if (peerConnections[id]) return;
+
+    const connection = new RTCPeerConnection(config);
+    peerConnections[id] = connection;
 
     localStream.getTracks().forEach((track) => {
-      peerConnection.addTrack(track, localStream);
+      connection.addTrack(track, localStream);
     });
 
-    peerConnection.ontrack = (event) => {
-      remoteStream.addTrack(event.track);
+    connection.ontrack = (event) => {
+      event.streams[0].getTracks().forEach((track) => {
+        remoteStream.addTrack(track);
+      });
       remoteVideo.srcObject = remoteStream;
       console.log('Received remote track:', event.track.kind);
     };
 
-    peerConnection.onicecandidate = (event) => {
+    connection.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit('ice-candidate', { room, candidate: event.candidate, to: id });
       }
@@ -78,14 +95,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function makeOffer(id) {
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
+    const connection = peerConnections[id];
+    const offer = await connection.createOffer();
+    await connection.setLocalDescription(offer);
     socket.emit('offer', { room, offer, to: id });
   }
 
   function sendMessage() {
     const message = messageInput.value;
-    socket.emit('chat-message', { room, message });
+    socket.emit('chat-message', { room, message, from: 'You' });
     const timestamp = new Date().toLocaleTimeString();
     chatBox.innerHTML += `<p>You [${timestamp}]: ${message}</p>`;
     messageInput.value = '';
